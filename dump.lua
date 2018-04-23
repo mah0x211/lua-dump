@@ -75,6 +75,7 @@ local DEFAULT_INDENT = 4;
 
 --- filter function for dump
 -- @param val
+-- @param depth
 -- @param typ
 -- @param asa
 -- @paran key
@@ -104,17 +105,18 @@ end
 
 --- dumptbl
 -- @param tbl
+-- @param depth
 -- @param indent
 -- @param nestIndent
 -- @param ctx
 -- @return str
-local function dumptbl( tbl, indent, nestIndent, ctx )
+local function dumptbl( tbl, depth, indent, nestIndent, ctx )
     local ref = tostring( tbl );
 
     -- circular reference
     if ctx.circular[ref] then
         local val, nodump = ctx.filter(
-            tbl, type( tbl ), FOR_CIRCULAR, tbl, ctx.udata
+            tbl, depth, type( tbl ), FOR_CIRCULAR, tbl, ctx.udata
         );
 
         if val ~= nil and val ~= tbl then
@@ -123,7 +125,7 @@ local function dumptbl( tbl, indent, nestIndent, ctx )
             if t == 'table' then
                 -- dump table value
                 if not nodump then
-                    return dumptbl( val, indent, nestIndent, ctx );
+                    return dumptbl( val, depth + 1, indent, nestIndent, ctx );
                 end
                 return tostring( val );
             elseif t == 'string' then
@@ -147,13 +149,13 @@ local function dumptbl( tbl, indent, nestIndent, ctx )
 
         for k, v in pairs( tbl ) do
             -- check key
-            local key, nokdump = ctx.filter( k, type( k ), FOR_KEY, nil,
+            local key, nokdump = ctx.filter( k, depth, type( k ), FOR_KEY, nil,
                                              ctx.udata );
 
             if key ~= nil then
                 -- check val
-                local val, novdump = ctx.filter( v, type( v ), FOR_VAL, key,
-                                                 ctx.udata );
+                local val, novdump = ctx.filter( v, depth, type( v ), FOR_VAL,
+                                                 key, ctx.udata );
                 local kv;
 
                 if val ~= nil then
@@ -168,7 +170,8 @@ local function dumptbl( tbl, indent, nestIndent, ctx )
                     -- dump table value
                     elseif kt == 'table' and not nokdump then
                         key = '[' ..
-                                  dumptbl( key, fieldIndent, nestIndent, ctx ) ..
+                                  dumptbl( key, depth + 1, fieldIndent,
+                                           nestIndent, ctx ) ..
                               ']';
                         k = key;
                         kt = 'string';
@@ -187,8 +190,11 @@ local function dumptbl( tbl, indent, nestIndent, ctx )
                     elseif vt == 'string' then
                         kv = strformat( '%s%s = %q', fieldIndent, key, val );
                     elseif vt == 'table' and not novdump then
-                        kv = strformat( '%s%s = %s', fieldIndent, key, dumptbl(
-                                        val, fieldIndent, nestIndent, ctx ) );
+                        kv = strformat(
+                                '%s%s = %s', fieldIndent, key,
+                                dumptbl( val, depth + 1, fieldIndent, nestIndent,
+                                         ctx )
+                            );
                     else
                         kv = strformat( '%s%s = %q', fieldIndent, key,
                                         tostring( val ) );
@@ -269,7 +275,7 @@ local function dump( val, indent, padding, filter, udata )
     if t == 'table' then
         indent = strformat( '%' .. tostring( indent ) .. 's', '' );
         padding = strformat( '%' .. tostring( padding ) .. 's', '' );
-        return dumptbl( val, padding, indent, {
+        return dumptbl( val, 1, padding, indent, {
             LF = indent == '' and ' ' or '\n',
             circular = {},
             filter = filter,
@@ -277,7 +283,7 @@ local function dump( val, indent, padding, filter, udata )
         });
     end
 
-    val = filter( val, t, FOR_VAL, nil, udata );
+    val = filter( val, 0, t, FOR_VAL, nil, udata );
     return tostring( val );
 end
 
