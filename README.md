@@ -31,9 +31,9 @@ returns the stringified value.
 - `str:string`: the stringified value
 
 
-**Fitler Function**
+## Fitler Function
 
-### val, nodump = filter( val, depth, typ, use, key, udata )
+### val, nodump = filter( val, depth, typ, use, key, udata )
 
 **Parameters**
 
