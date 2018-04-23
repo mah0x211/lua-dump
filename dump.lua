@@ -188,7 +188,12 @@ local function dumptbl( tbl, depth, indent, nestIndent, ctx )
                         kv = strformat( '%s%s = %s', fieldIndent, key,
                                         tostring( val ) );
                     elseif vt == 'string' then
-                        kv = strformat( '%s%s = %q', fieldIndent, key, val );
+                        -- dump a string-value
+                        if not novdump then
+                            kv = strformat( '%s%s = %q', fieldIndent, key, val );
+                        else
+                            kv = strformat( '%s%s = %s', fieldIndent, key, val );
+                        end
                     elseif vt == 'table' and not novdump then
                         kv = strformat(
                                 '%s%s = %s', fieldIndent, key,
@@ -281,10 +286,16 @@ local function dump( val, indent, padding, filter, udata )
             filter = filter,
             udata = udata
         });
-    end
+    -- dump value
+    else
+        local v, nodump = filter( val, 0, t, FOR_VAL, nil, udata );
 
-    val = filter( val, 0, t, FOR_VAL, nil, udata );
-    return tostring( val );
+        if nodump == true then
+            return tostring( v );
+        end
+
+        return strformat( '%q', tostring( v ) );
+    end
 end
 
 
