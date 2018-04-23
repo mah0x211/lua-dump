@@ -113,14 +113,20 @@ local function dumptbl( tbl, indent, nestIndent, ctx )
 
     -- circular reference
     if ctx.circular[ref] then
-        local val = ctx.filter(
+        local val, nodump = ctx.filter(
             tbl, type( tbl ), FOR_CIRCULAR, tbl, ctx.udata
         );
 
         if val ~= nil and val ~= tbl then
             local t = type( val );
 
-            if t == 'string' then
+            if t == 'table' then
+                -- dump table value
+                if not nodump then
+                    return dumptbl( val, indent, nestIndent, ctx );
+                end
+                return tostring( val );
+            elseif t == 'string' then
                 return strformat( '%q', val );
             elseif t == 'number' or t == 'boolean' then
                 return tostring( val );
@@ -135,57 +141,67 @@ local function dumptbl( tbl, indent, nestIndent, ctx )
         local arr = {};
         local narr = 0;
         local fieldIndent = indent .. nestIndent;
-        local arrFmt = fieldIndent .. '[%s] = %s';
-        local strFmt = fieldIndent .. '%s = %s';
-        local ptrFmt = fieldIndent .. '[%q] = %s';
 
         -- save reference
         ctx.circular[ref] = true;
 
         for k, v in pairs( tbl ) do
             -- check key
-            k = ctx.filter( k, type( k ), FOR_KEY, nil, ctx.udata );
-            if k then
-                local tk = type( k );
-                -- check value
-                local val, skip = ctx.filter( v, type( v ), FOR_VAL, k,
-                                              ctx.udata );
+            local key, nokdump = ctx.filter( k, type( k ), FOR_KEY, nil,
+                                             ctx.udata );
 
-                -- just convert to string
-                if skip then
-                    v = tostring( val );
-                else
-                    local tv = type( val );
+            if key ~= nil then
+                -- check val
+                local val, novdump = ctx.filter( v, type( v ), FOR_VAL, key,
+                                                 ctx.udata );
+                local kv;
 
-                    if tv == 'table' then
-                        v = dumptbl( val, fieldIndent, nestIndent, ctx );
-                    elseif tv == 'string' then
-                        v = strformat( '%q', val );
-                    elseif tv == 'number' or tv == 'boolean' then
-                        v = tostring( val );
-                    else
-                        v = strformat( '%q', tostring( val ) );
+                if val ~= nil then
+                    local kt = type( key );
+                    local vt = type( val );
+
+                    -- convert key to suitable to be safely read back
+                    -- by the Lua interpreter
+                    if kt == 'number' or kt == 'boolean' then
+                        k = key;
+                        key = '[' .. tostring( key ) .. ']';
+                    -- dump table value
+                    elseif kt == 'table' and not nokdump then
+                        key = '[' ..
+                                  dumptbl( key, fieldIndent, nestIndent, ctx ) ..
+                              ']';
+                        k = key;
+                        kt = 'string';
+                    elseif kt ~= 'string' or RESERVED_WORD[key] or
+                           not strmatch( key, LUA_FIELDNAME_PAT ) then
+                        key = strformat( "[%q]", tostring( key ), v );
+                        k = key;
+                        kt = 'string';
                     end
-                end
 
-                if tk == 'number' or tk == 'boolean' then
-                    v = strformat( arrFmt, tostring( k ), v );
-                elseif tk == 'string' and not RESERVED_WORD[k] and
-                       strmatch( k, LUA_FIELDNAME_PAT ) then
-                    v = strformat( strFmt, k, v );
-                else
-                    k = tostring( k );
-                    v = strformat( ptrFmt, k, v );
-                    tk = 'string';
-                end
+                    -- convert key-val pair to suitable to be safely read back
+                    -- by the Lua interpreter
+                    if vt == 'number' or vt == 'boolean' then
+                        kv = strformat( '%s%s = %s', fieldIndent, key,
+                                        tostring( val ) );
+                    elseif vt == 'string' then
+                        kv = strformat( '%s%s = %q', fieldIndent, key, val );
+                    elseif vt == 'table' and not novdump then
+                        kv = strformat( '%s%s = %s', fieldIndent, key, dumptbl(
+                                        val, fieldIndent, nestIndent, ctx ) );
+                    else
+                        kv = strformat( '%s%s = %q', fieldIndent, key,
+                                        tostring( val ) );
+                    end
 
-                -- add to array
-                narr = narr + 1;
-                arr[narr] = {
-                    typ = tk,
-                    key = k,
-                    val = v
-                };
+                    -- add to array
+                    narr = narr + 1;
+                    arr[narr] = {
+                        typ = kt,
+                        key = k,
+                        val = kv
+                    };
+                end
             end
         end
 
@@ -206,7 +222,6 @@ local function dumptbl( tbl, indent, nestIndent, ctx )
 
         return res;
     end
-
 end
 
 
