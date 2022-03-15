@@ -1,7 +1,7 @@
 package = "dump"
 version = "scm-1"
 source = {
-    url = "git://github.com/mah0x211/lua-dump.git"
+    url = "git+https://github.com/mah0x211/lua-dump.git"
 }
 description = {
     summary = "stringified lua data structures, suitable for both printing and loading as chunk.",
