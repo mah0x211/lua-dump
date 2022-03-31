@@ -12,9 +12,7 @@ luarocks install dump --from=http://mah0x211.github.io/rocks/
 ```
 
 
-## Functions
-
-### str = dump( val [, indent [, padding [, filter [, udata]]]] )
+## str = dump( val [, indent [, padding [, filter [, udata]]]] )
 
 returns the stringified value.
 
@@ -31,7 +29,7 @@ returns the stringified value.
 - `str:string`: the stringified value
 
 
-## Fitler Function
+**Fitler Function**
 
 ### val, nodump = filter( val, depth, typ, use, key, udata )
 
