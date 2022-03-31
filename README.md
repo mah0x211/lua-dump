@@ -8,7 +8,7 @@ convert lua data to string.
 ## Installation
 
 ```sh
-luarocks install dump --from=http://mah0x211.github.io/rocks/
+luarocks install dump
 ```
 
 
