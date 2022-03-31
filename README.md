@@ -1,7 +1,7 @@
 lua-dump
 =========
 
-stringified lua data structures, suitable for both printing and loading as chunk.
+convert lua data to string.
 
 ---
 
