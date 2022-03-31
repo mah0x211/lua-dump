@@ -71,22 +71,22 @@ local RESERVED_WORD = {
 local DEFAULT_INDENT = 4
 
 --- filter function for dump
--- @param val
--- @param depth
--- @param typ
--- @param asa
--- @paran key
--- @param udata
--- @return val
--- @return skip
+--- @param val any
+--- @param depth integer
+--- @param vtype string
+--- @param use string
+--- @param key any
+--- @param udata any
+--- @return any val
+--- @return boolean nodump
 local function DEFAULT_FILTER(val)
     return val
 end
 
---- sortIndex
--- @param a
--- @param b
-local function sortIndex(a, b)
+--- sort_index
+--- @param a table
+--- @param b table
+local function sort_index(a, b)
     if a.typ == b.typ then
         if a.typ == 'boolean' then
             return b.key
@@ -99,12 +99,12 @@ local function sortIndex(a, b)
 end
 
 --- dumptbl
--- @param tbl
--- @param depth
--- @param indent
--- @param nestIndent
--- @param ctx
--- @return str
+--- @param tbl table
+--- @param depth integer
+--- @param indent string
+--- @param nestIndent string
+--- @param ctx table
+--- @return string
 local function dumptbl(tbl, depth, indent, nestIndent, ctx)
     local ref = tostring(tbl)
 
@@ -132,136 +132,137 @@ local function dumptbl(tbl, depth, indent, nestIndent, ctx)
         end
 
         return '"<Circular ' .. ref .. '>"'
-    else
-        local res = {}
-        local arr = {}
-        local narr = 0
-        local fieldIndent = indent .. nestIndent
-
-        -- save reference
-        ctx.circular[ref] = true
-
-        for k, v in pairs(tbl) do
-            -- check key
-            local key, nokdump = ctx.filter(k, depth, type(k), FOR_KEY, nil,
-                                            ctx.udata)
-
-            if key ~= nil then
-                -- check val
-                local val, novdump = ctx.filter(v, depth, type(v), FOR_VAL, key,
-                                                ctx.udata)
-                local kv
-
-                if val ~= nil then
-                    local kt = type(key)
-                    local vt = type(val)
-
-                    -- convert key to suitable to be safely read back
-                    -- by the Lua interpreter
-                    if kt == 'number' or kt == 'boolean' then
-                        k = key
-                        key = '[' .. tostring(key) .. ']'
-                        -- dump table value
-                    elseif kt == 'table' and not nokdump then
-                        key = '[' ..
-                                  dumptbl(key, depth + 1, fieldIndent,
-                                          nestIndent, ctx) .. ']'
-                        k = key
-                        kt = 'string'
-                    elseif kt ~= 'string' or RESERVED_WORD[key] or
-                        not strmatch(key, LUA_FIELDNAME_PAT) then
-                        key = strformat("[%q]", tostring(key), v)
-                        k = key
-                        kt = 'string'
-                    end
-
-                    -- convert key-val pair to suitable to be safely read back
-                    -- by the Lua interpreter
-                    if vt == 'number' or vt == 'boolean' then
-                        kv = strformat('%s%s = %s', fieldIndent, key,
-                                       tostring(val))
-                    elseif vt == 'string' then
-                        -- dump a string-value
-                        if not novdump then
-                            kv = strformat('%s%s = %q', fieldIndent, key, val)
-                        else
-                            kv = strformat('%s%s = %s', fieldIndent, key, val)
-                        end
-                    elseif vt == 'table' and not novdump then
-                        kv = strformat('%s%s = %s', fieldIndent, key, dumptbl(
-                                           val, depth + 1, fieldIndent,
-                                           nestIndent, ctx))
-                    else
-                        kv = strformat('%s%s = %q', fieldIndent, key,
-                                       tostring(val))
-                    end
-
-                    -- add to array
-                    narr = narr + 1
-                    arr[narr] = {
-                        typ = kt,
-                        key = k,
-                        val = kv,
-                    }
-                end
-            end
-        end
-
-        -- remove reference
-        ctx.circular[ref] = nil
-        -- concat result
-        if narr > 0 then
-            tblsort(arr, sortIndex)
-
-            for i = 1, narr do
-                res[i] = arr[i].val
-            end
-            res[1] = '{' .. ctx.LF .. res[1]
-            res = tblconcat(res, ',' .. ctx.LF) .. ctx.LF .. indent .. '}'
-        else
-            res = '{}'
-        end
-
-        return res
     end
+
+    local res = {}
+    local arr = {}
+    local narr = 0
+    local fieldIndent = indent .. nestIndent
+
+    -- save reference
+    ctx.circular[ref] = true
+
+    for k, v in pairs(tbl) do
+        -- check key
+        local key, nokdump = ctx.filter(k, depth, type(k), FOR_KEY, nil,
+                                        ctx.udata)
+
+        if key ~= nil then
+            -- check val
+            local val, novdump = ctx.filter(v, depth, type(v), FOR_VAL, key,
+                                            ctx.udata)
+            local kv
+
+            if val ~= nil then
+                local kt = type(key)
+                local vt = type(val)
+
+                -- convert key to suitable to be safely read back
+                -- by the Lua interpreter
+                if kt == 'number' or kt == 'boolean' then
+                    k = key
+                    key = '[' .. tostring(key) .. ']'
+                    -- dump table value
+                elseif kt == 'table' and not nokdump then
+                    key = '[' ..
+                              dumptbl(key, depth + 1, fieldIndent, nestIndent,
+                                      ctx) .. ']'
+                    k = key
+                    kt = 'string'
+                elseif kt ~= 'string' or RESERVED_WORD[key] or
+                    not strmatch(key, LUA_FIELDNAME_PAT) then
+                    key = strformat("[%q]", tostring(key), v)
+                    k = key
+                    kt = 'string'
+                end
+
+                -- convert key-val pair to suitable to be safely read back
+                -- by the Lua interpreter
+                if vt == 'number' or vt == 'boolean' then
+                    kv = strformat('%s%s = %s', fieldIndent, key, tostring(val))
+                elseif vt == 'string' then
+                    -- dump a string-value
+                    if not novdump then
+                        kv = strformat('%s%s = %q', fieldIndent, key, val)
+                    else
+                        kv = strformat('%s%s = %s', fieldIndent, key, val)
+                    end
+                elseif vt == 'table' and not novdump then
+                    kv = strformat('%s%s = %s', fieldIndent, key, dumptbl(val,
+                                                                          depth +
+                                                                              1,
+                                                                          fieldIndent,
+                                                                          nestIndent,
+                                                                          ctx))
+                else
+                    kv = strformat('%s%s = %q', fieldIndent, key, tostring(val))
+                end
+
+                -- add to array
+                narr = narr + 1
+                arr[narr] = {
+                    typ = kt,
+                    key = k,
+                    val = kv,
+                }
+            end
+        end
+    end
+
+    -- remove reference
+    ctx.circular[ref] = nil
+    -- concat result
+    if narr > 0 then
+        tblsort(arr, sort_index)
+
+        for i = 1, narr do
+            res[i] = arr[i].val
+        end
+        res[1] = '{' .. ctx.LF .. res[1]
+        res = tblconcat(res, ',' .. ctx.LF) .. ctx.LF .. indent .. '}'
+    else
+        res = '{}'
+    end
+
+    return res
 end
 
---- isuint
--- @param v
--- @return ok
-local function isUInt(v)
+--- is_uint
+--- @param v any
+--- @return boolean ok
+local function is_uint(v)
     return type(v) == 'number' and v < INFINITE_POS and v >= 0 and floor(v) == v
 end
 
 --- dump
--- @param val
--- @param indent
--- @param padding
--- @param filter
--- @param udata
--- @return str
+--- @param val any
+--- @param indent integer
+--- @param padding integer
+--- @param filter function
+--- @param udata
+--- @return string
 local function dump(val, indent, padding, filter, udata)
     local t = type(val)
 
     -- check indent
     if indent == nil then
         indent = DEFAULT_INDENT
-    elseif not isUInt(indent) then
-        error('indent must be unsigned integer')
+    elseif not is_uint(indent) then
+        error('indent must be unsigned integer', 2)
     end
 
     -- check padding
     if padding == nil then
         padding = 0
-    elseif not isUInt(padding) then
-        error('padding must be unsigned integer')
+    elseif not is_uint(padding) then
+        error('padding must be unsigned integer', 2)
     end
 
     -- check filter
     if filter == nil then
         filter = DEFAULT_FILTER
     elseif type(filter) ~= 'function' then
-        error('opt.filter must be function')
+        error('filter must be function', 2)
     end
 
     -- dump table
@@ -283,16 +284,14 @@ local function dump(val, indent, padding, filter, udata)
             filter = filter,
             udata = udata,
         })
-        -- dump value
-    else
-        local v, nodump = filter(val, 0, t, FOR_VAL, nil, udata)
-
-        if nodump == true then
-            return tostring(v)
-        end
-
-        return strformat('%q', tostring(v))
     end
+
+    -- dump value
+    local v, nodump = filter(val, 0, t, FOR_VAL, nil, udata)
+    if nodump == true then
+        return tostring(v)
+    end
+    return strformat('%q', tostring(v))
 end
 
 return dump
