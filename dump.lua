@@ -266,10 +266,19 @@ local function dump(val, indent, padding, filter, udata)
 
     -- dump table
     if t == 'table' then
-        indent = strformat('%' .. tostring(indent) .. 's', '')
-        padding = strformat('%' .. tostring(padding) .. 's', '')
-        return dumptbl(val, 1, padding, indent, {
-            LF = indent == '' and ' ' or '\n',
+        local ispace = ''
+        local pspace = ''
+
+        if indent > 0 then
+            ispace = strformat('%' .. tostring(indent) .. 's', '')
+        end
+
+        if padding > 0 then
+            pspace = strformat('%' .. tostring(padding) .. 's', '')
+        end
+
+        return dumptbl(val, 1, pspace, ispace, {
+            LF = ispace == '' and ' ' or '\n',
             circular = {},
             filter = filter,
             udata = udata,
