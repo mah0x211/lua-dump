@@ -121,13 +121,13 @@ local function dumptbl(tbl, depth, indent, nestIndent, ctx)
                 if not nodump then
                     return dumptbl(val, depth + 1, indent, nestIndent, ctx)
                 end
-                return tostring(val)
+                return strformat('%q', tostring(val))
             elseif t == 'string' then
                 return strformat('%q', val)
             elseif t == 'number' or t == 'boolean' then
                 return tostring(val)
             end
-
+            -- other types are converted to quoted string
             return strformat('%q', tostring(val))
         end
 
