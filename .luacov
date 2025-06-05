@@ -1,0 +1,6 @@
+codefromstrings = false
+runreport = true
+deletestats = true
+modules = {
+    ["dump"] = "dump.lua",
+}

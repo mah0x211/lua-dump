@@ -70,16 +70,21 @@ local RESERVED_WORD = {
 }
 local DEFAULT_INDENT = 4
 
---- filter function for dump
+--- @alias dump.filter fun(val: any, depth: integer, vtype: string, use: string, key: any, udata: any): (any, boolean?)
+
+--- filter function that is called for each values.
+--- It can be used to filter out values that should not be dumped.
+--- If the function returns nodump as true, the value will not be dumped.
+--- If the function returns a value that is not nil, it will be used as the dumped value.
 --- @param val any
---- @param depth integer
---- @param vtype string
---- @param use string
---- @param key any
---- @param udata any
---- @return any val
---- @return boolean nodump
-local function DEFAULT_FILTER(val)
+--- @param depth integer depth of the value in the table
+--- @param vtype string type of the value
+--- @param use string one of FOR_KEY, FOR_VAL, FOR_CIRCULAR
+--- @param key any key of the value if use is FOR_VAL or FOR_CIRCULAR
+--- @param udata any user data that is passed from the dump function
+--- @return any val the value to be dumped or nil to skip dumping
+--- @return boolean? nodump if true, the value will not be dumped
+local function DEFAULT_FILTER(val, depth, vtype, use, key, udata)
     return val
 end
 
@@ -89,13 +94,22 @@ end
 local function sort_index(a, b)
     if a.typ == b.typ then
         if a.typ == 'boolean' then
-            return b.key
+            -- false < true
+            return not a.key and b.key
         end
-
+        -- number, string or other types
         return a.key < b.key
     end
 
-    return a.typ == 'number'
+    -- 1st priority is number
+    if a.typ == 'number' then
+        return true
+    elseif b.typ == 'number' then
+        return false
+    end
+
+    -- 2nd priority is boolean
+    return a.typ == 'boolean'
 end
 
 --- dumptbl
@@ -214,33 +228,29 @@ local function dumptbl(tbl, depth, indent, nestIndent, ctx)
     -- concat result
     if narr > 0 then
         tblsort(arr, sort_index)
-
         for i = 1, narr do
             res[i] = arr[i].val
         end
         res[1] = '{' .. ctx.LF .. res[1]
-        res = tblconcat(res, ',' .. ctx.LF) .. ctx.LF .. indent .. '}'
-    else
-        res = '{}'
+        return tblconcat(res, ',' .. ctx.LF) .. ctx.LF .. indent .. '}'
     end
-
-    return res
+    return '{}'
 end
 
---- is_uint
+--- determine if the value is an unsigned integer
 --- @param v any
---- @return boolean ok
+--- @return boolean ok true if the value is an unsigned integer
 local function is_uint(v)
     return type(v) == 'number' and v < INFINITE_POS and v >= 0 and floor(v) == v
 end
 
---- dump
---- @param val any
---- @param indent integer
---- @param padding integer
---- @param filter function
---- @param udata
---- @return string
+--- dump a value to a string that can be safely read back by the Lua interpreter.
+--- @param val any the value to be dumped
+--- @param indent integer? the number of spaces to indent each line (default: 4).
+--- @param padding integer? the number of spaces to padding each line (default: 0).
+--- @param filter dump.filter filter function that is called for each values
+--- @param udata any user data that is passed to the filter function
+--- @return string str the dumped string
 local function dump(val, indent, padding, filter, udata)
     local t = type(val)
 
