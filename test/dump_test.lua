@@ -103,11 +103,12 @@ function testcase.dump_non_table_value()
     -- test that non-table values are dumped correctly
 
     -- Test basic value types
-    assert.equal(dump(nil), '"nil"')
-    assert.equal(dump(true), '"true"')
-    assert.equal(dump(false), '"false"')
-    assert.equal(dump(123), '"123"')
-    assert.equal(dump(123.45), '"123.45"')
+    assert.equal(dump(nil), 'nil')
+    assert.equal(dump(true), 'true')
+    assert.equal(dump(false), 'false')
+    assert.equal(dump(123), '123')
+    assert.equal(dump(123.45), '123.45')
+    assert.equal(dump(-123.45), '-123.45')
     assert.equal(dump("hello"), '"hello"')
 
     -- Test with custom filter
@@ -118,7 +119,7 @@ function testcase.dump_non_table_value()
         end
         return val
     end)
-    assert.equal(result, "test")
+    assert.equal(result, '"test"')
 end
 
 function testcase.dump_unnested_table()

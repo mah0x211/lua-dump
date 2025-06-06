@@ -297,11 +297,14 @@ local function dump(val, indent, padding, filter, udata)
     end
 
     -- dump value
-    local v, nodump = filter(val, 0, t, FOR_VAL, nil, udata)
-    if nodump == true then
-        return tostring(v)
+    local v = filter(val, 0, t, FOR_VAL, nil, udata)
+    t = type(v)
+    v = tostring(v)
+    if t == 'number' or t == 'boolean' or t == 'nil' then
+        return v
     end
-    return strformat('%q', tostring(v))
+    -- non number/boolean/nil values are converted to quoted string
+    return strformat('%q', v)
 end
 
 return dump
