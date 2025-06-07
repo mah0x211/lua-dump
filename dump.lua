@@ -31,6 +31,7 @@ local tblsort = table.sort
 local tblconcat = table.concat
 local strmatch = string.match
 local strformat = string.format
+local strrep = string.rep
 --- constants
 local INFINITE_POS = math.huge
 local LUA_FIELDNAME_PAT = '^[a-zA-Z_][a-zA-Z0-9_]*$'
@@ -72,20 +73,113 @@ local DEFAULT_INDENT = 4
 
 --- @alias dump.filter fun(val: any, depth: integer, vtype: string, use: string, key: any, udata: any): (any, boolean?)
 
---- filter function that is called for each values.
---- It can be used to filter out values that should not be dumped.
---- If the function returns nodump as true, the value will not be dumped.
---- If the function returns a value that is not nil, it will be used as the dumped value.
---- @param val any
---- @param depth integer depth of the value in the table
---- @param vtype string type of the value
---- @param use string one of FOR_KEY, FOR_VAL, FOR_CIRCULAR
---- @param key any key of the value if use is FOR_VAL or FOR_CIRCULAR
---- @param udata any user data that is passed from the dump function
---- @return any val the value to be dumped or nil to skip dumping
---- @return boolean? nodump if true, the value will not be dumped
-local function DEFAULT_FILTER(val, depth, vtype, use, key, udata)
-    return val
+--- @class dump.ctx
+--- @field LF string line feed character
+--- @field indent string indentation string
+--- @field padding string padding string
+--- @field depth integer current depth of the table
+--- @field circular table a table that holds circular references
+--- @field filter dump.filter filter function
+--- @field udata any user data that is passed to the filter function
+
+--- @class dump.table
+--- @field typ string type of the value
+--- @field key string the key of the value
+--- @field val string the dumped key-value pair as a string
+
+--- dump a table to a string array
+--- @param ctx table
+--- @param tbl table
+--- @param dump_next_table fun(ctx: table, tbl: table):string
+--- @return dump.table[] arr the dumped strings
+--- @return integer narr the number of dumped strings
+local function dump_table(ctx, tbl, dump_next_table)
+    local arr = {}
+    local narr = 0
+    for k, v in pairs(tbl) do
+        -- check key
+        local key, nokdump = ctx.filter(k, ctx.depth, type(k), FOR_KEY, nil,
+                                        ctx.udata)
+
+        if key ~= nil then
+            -- check val
+            local val, novdump = ctx.filter(v, ctx.depth, type(v), FOR_VAL, key,
+                                            ctx.udata)
+            local kv
+
+            if val ~= nil then
+                local kt = type(key)
+                local vt = type(val)
+
+                -- convert key to suitable to be safely read back
+                -- by the Lua interpreter
+                if kt == 'number' or kt == 'boolean' then
+                    k = key
+                    key = '[' .. tostring(key) .. ']'
+                elseif kt == 'table' and not nokdump then
+                    -- dump table value
+                    key = '[' .. dump_next_table(ctx, key) .. ']'
+                    k = key
+                    kt = 'string'
+                elseif kt ~= 'string' or RESERVED_WORD[key] or
+                    not strmatch(key, LUA_FIELDNAME_PAT) then
+                    key = strformat("[%q]", tostring(key), v)
+                    k = key
+                    kt = 'string'
+                end
+
+                -- convert key-val pair to suitable to be safely read back
+                -- by the Lua interpreter
+                if vt == 'number' or vt == 'boolean' then
+                    val = tostring(val)
+                elseif vt == 'string' then
+                    -- dump a string-value
+                    if not novdump then
+                        val = strformat('%q', val)
+                    end
+                elseif vt == 'table' and not novdump then
+                    val = dump_next_table(ctx, val)
+                else
+                    val = strformat('%q', tostring(val))
+                end
+                kv = strformat('%s%s = %s', ctx.indent, key, val)
+
+                -- add to array
+                narr = narr + 1
+                arr[narr] = {
+                    typ = kt,
+                    key = k,
+                    val = kv,
+                }
+            end
+        end
+    end
+
+    return arr, narr
+end
+
+--- dump a circular referenced table to a string
+--- @param ctx dump.ctx
+--- @param tbl table the table to be dumped
+--- @param dump_next_table fun(ctx: dump.ctx, tbl: table):string
+--- @return string str the dumped string or nil if the table is not circular
+local function dump_circular(ctx, tbl, ref, dump_next_table)
+    local val, nodump = ctx.filter(tbl, ctx.depth, type(tbl), FOR_CIRCULAR, tbl,
+                                   ctx.udata)
+    if val ~= nil and val ~= tbl then
+        local t = type(val)
+
+        if t == 'number' or t == 'boolean' then
+            return tostring(val)
+        elseif t == 'table' and not nodump then
+            -- dump table value
+            return dump_next_table(ctx, val)
+        end
+        -- otherwise, convert to quoted string
+        return strformat('%q', tostring(val))
+    end
+
+    return '"<Circular ' .. ref .. '>"'
 end
 
 --- sort_index
@@ -112,129 +206,52 @@ local function sort_index(a, b)
     return a.typ == 'boolean'
 end
 
---- dumptbl
---- @param tbl table
---- @param depth integer
---- @param indent string
---- @param nestIndent string
+--- dump a table by calling dump_table.
+--- This function is used to handle the initial call with depth 1.
 --- @param ctx table
+--- @param tbl table
 --- @return string
-local function dumptbl(tbl, depth, indent, nestIndent, ctx)
+local function dump_next_table(ctx, tbl)
+    -- update context
+    local depth = ctx.depth or 0
+    ctx.depth = depth + 1
+
     local ref = tostring(tbl)
-
-    -- circular reference
     if ctx.circular[ref] then
-        local val, nodump = ctx.filter(tbl, depth, type(tbl), FOR_CIRCULAR, tbl,
-                                       ctx.udata)
-
-        if val ~= nil and val ~= tbl then
-            local t = type(val)
-
-            if t == 'table' then
-                -- dump table value
-                if not nodump then
-                    return dumptbl(val, depth + 1, indent, nestIndent, ctx)
-                end
-                return strformat('%q', tostring(val))
-            elseif t == 'string' then
-                return strformat('%q', val)
-            elseif t == 'number' or t == 'boolean' then
-                return tostring(val)
-            end
-            -- other types are converted to quoted string
-            return strformat('%q', tostring(val))
-        end
-
-        return '"<Circular ' .. ref .. '>"'
+        -- dump circular referenced table to a string
+        -- if it is circular, it will return a string that indicates the circular references
+        local str = dump_circular(ctx, tbl, ref, dump_next_table)
+        -- restore context
+        ctx.depth = depth
+        return str
     end
 
-    local res = {}
-    local arr = {}
-    local narr = 0
-    local fieldIndent = indent .. nestIndent
+    local indent = ctx.indent
+    ctx.indent = indent .. ctx.padding
 
     -- save reference
     ctx.circular[ref] = true
-
-    for k, v in pairs(tbl) do
-        -- check key
-        local key, nokdump = ctx.filter(k, depth, type(k), FOR_KEY, nil,
-                                        ctx.udata)
-
-        if key ~= nil then
-            -- check val
-            local val, novdump = ctx.filter(v, depth, type(v), FOR_VAL, key,
-                                            ctx.udata)
-            local kv
-
-            if val ~= nil then
-                local kt = type(key)
-                local vt = type(val)
-
-                -- convert key to suitable to be safely read back
-                -- by the Lua interpreter
-                if kt == 'number' or kt == 'boolean' then
-                    k = key
-                    key = '[' .. tostring(key) .. ']'
-                    -- dump table value
-                elseif kt == 'table' and not nokdump then
-                    key = '[' ..
-                              dumptbl(key, depth + 1, fieldIndent, nestIndent,
-                                      ctx) .. ']'
-                    k = key
-                    kt = 'string'
-                elseif kt ~= 'string' or RESERVED_WORD[key] or
-                    not strmatch(key, LUA_FIELDNAME_PAT) then
-                    key = strformat("[%q]", tostring(key), v)
-                    k = key
-                    kt = 'string'
-                end
-
-                -- convert key-val pair to suitable to be safely read back
-                -- by the Lua interpreter
-                if vt == 'number' or vt == 'boolean' then
-                    kv = strformat('%s%s = %s', fieldIndent, key, tostring(val))
-                elseif vt == 'string' then
-                    -- dump a string-value
-                    if not novdump then
-                        kv = strformat('%s%s = %q', fieldIndent, key, val)
-                    else
-                        kv = strformat('%s%s = %s', fieldIndent, key, val)
-                    end
-                elseif vt == 'table' and not novdump then
-                    kv = strformat('%s%s = %s', fieldIndent, key, dumptbl(val,
-                                                                          depth +
-                                                                              1,
-                                                                          fieldIndent,
-                                                                          nestIndent,
-                                                                          ctx))
-                else
-                    kv = strformat('%s%s = %q', fieldIndent, key, tostring(val))
-                end
-
-                -- add to array
-                narr = narr + 1
-                arr[narr] = {
-                    typ = kt,
-                    key = k,
-                    val = kv,
-                }
-            end
-        end
-    end
-
+    -- dump table
+    local arr, narr = dump_table(ctx, tbl, dump_next_table)
     -- remove reference
     ctx.circular[ref] = nil
-    -- concat result
-    if narr > 0 then
-        tblsort(arr, sort_index)
-        for i = 1, narr do
-            res[i] = arr[i].val
-        end
-        res[1] = '{' .. ctx.LF .. res[1]
-        return tblconcat(res, ',' .. ctx.LF) .. ctx.LF .. indent .. '}'
+    -- restore context
+    ctx.indent = indent
+    ctx.depth = depth
+
+    if narr == 0 then
+        -- empty table
+        return '{}'
     end
-    return '{}'
+
+    -- concat result array to a string
+    tblsort(arr, sort_index)
+    local res = {}
+    for i = 1, narr do
+        res[i] = arr[i].val
+    end
+    res[1] = '{' .. ctx.LF .. res[1]
+    return tblconcat(res, ',' .. ctx.LF) .. ctx.LF .. ctx.indent .. '}'
 end
 
 --- determine if the value is an unsigned integer
@@ -242,6 +259,22 @@ end
 --- @return boolean ok true if the value is an unsigned integer
 local function is_uint(v)
     return type(v) == 'number' and v < INFINITE_POS and v >= 0 and floor(v) == v
+end
+
+--- filter function that is called for each values.
+--- It can be used to filter out values that should not be dumped.
+--- If the function returns nodump as true, the value will not be dumped.
+--- If the function returns a value that is not nil, it will be used as the dumped value.
+--- @param val any
+--- @param depth integer depth of the value in the table
+--- @param vtype string type of the value
+--- @param use string one of FOR_KEY, FOR_VAL, FOR_CIRCULAR
+--- @param key any key of the value if use is FOR_VAL or FOR_CIRCULAR
+--- @param udata any user data that is passed from the dump function
+--- @return any val the value to be dumped or nil to skip dumping
+--- @return boolean? nodump if true, the value will not be dumped
+local function DEFAULT_FILTER(val, depth, vtype, use, key, udata)
+    return val
 end
 
 --- dump a value to a string that can be safely read back by the Lua interpreter.
@@ -277,23 +310,16 @@ local function dump(val, indent, padding, filter, udata)
 
     -- dump table
     if t == 'table' then
-        local ispace = ''
-        local pspace = ''
-
-        if indent > 0 then
-            ispace = strformat('%' .. tostring(indent) .. 's', '')
-        end
-
-        if padding > 0 then
-            pspace = strformat('%' .. tostring(padding) .. 's', '')
-        end
-
-        return dumptbl(val, 1, pspace, ispace, {
+        local ispace = strrep(' ', indent)
+        return dump_next_table({
             LF = ispace == '' and ' ' or '\n',
+            indent = strrep(' ', padding),
+            padding = ispace,
+            depth = 0,
             circular = {},
             filter = filter,
             udata = udata,
-        })
+        }, val)
     end
 
     -- dump value
