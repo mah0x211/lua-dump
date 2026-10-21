@@ -108,23 +108,24 @@ local function dump_table(ctx, tbl, dump_next_table)
             local kv
 
             if val ~= nil then
+                local sortkey = k
                 local kt = type(key)
                 local vt = type(val)
 
                 -- convert key to suitable to be safely read back
                 -- by the Lua interpreter
                 if kt == 'number' or kt == 'boolean' then
-                    k = key
+                    sortkey = key
                     key = '[' .. tostring(key) .. ']'
                 elseif kt == 'table' and not nokdump then
                     -- dump table value
                     key = '[' .. dump_next_table(ctx, key) .. ']'
-                    k = key
+                    sortkey = key
                     kt = 'string'
                 elseif kt ~= 'string' or RESERVED_WORD[key] or
                     not strmatch(key, LUA_FIELDNAME_PAT) then
                     key = strformat("[%q]", tostring(key), v)
-                    k = key
+                    sortkey = key
                     kt = 'string'
                 end
 
@@ -148,7 +149,7 @@ local function dump_table(ctx, tbl, dump_next_table)
                 narr = narr + 1
                 arr[narr] = {
                     typ = kt,
-                    key = k,
+                    key = sortkey,
                     val = kv,
                 }
             end

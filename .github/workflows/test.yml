@@ -41,6 +41,7 @@ jobs:
           - "5.2.:latest"
           - "5.3.:latest"
           - "5.4.:latest"
+          - "5.5.:latest"
           - "lj-v2.1:latest"
     steps:
     -
