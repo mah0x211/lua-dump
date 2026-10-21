@@ -810,5 +810,47 @@ function testcase.dump_string_vs_other_type_sorting()
     end
 end
 
+function testcase.dump_filtered_key_sorting()
+    for _, input_key in ipairs({
+        1,
+        false,
+        {},
+    }) do
+        local result = dump({
+            [input_key] = "converted",
+            z = "unchanged",
+        }, nil, nil, function(val, depth, vtype, use)
+            if use == 'key' and val == input_key then
+                return 'alpha'
+            end
+            return val
+        end)
+        assert.equal(result, [[{
+    alpha = "converted",
+    z = "unchanged"
+}]])
+    end
+end
+
+function testcase.dump_renamed_string_key_sorting()
+    local names = {
+        a = 'z',
+        z = 'a',
+    }
+    local result = dump({
+        a = 1,
+        z = 2,
+    }, nil, nil, function(val, depth, vtype, use)
+        if use == 'key' then
+            return names[val]
+        end
+        return val
+    end)
+    assert.equal(result, [[{
+    a = 2,
+    z = 1
+}]])
+end
+
 -- Run described test cases
 run_all_tests()

@@ -108,7 +108,7 @@ local function dump_table(ctx, tbl, dump_next_table)
             local kv
 
             if val ~= nil then
-                local sortkey = k
+                local sortkey = key
                 local kt = type(key)
                 local vt = type(val)
 
