@@ -5,20 +5,20 @@ on:
     paths-ignore:
       - '**.md'
       - 'LICENSE'
-
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
 
 jobs:
   luacheck:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/mah0x211/lua-ci:latest
     steps:
     -
       name: Checkout
-      uses: actions/checkout@v2
-      with:
-        submodules: 'true'
-    -
-      name: Setup Lua
-      uses: mah0x211/setup-lua@v1
+      uses: actions/checkout@v7
     -
       name: Install Tools
       run: luarocks install luacheck
@@ -28,7 +28,12 @@ jobs:
         luacheck .
 
   test:
+    needs: luacheck
+    permissions:
+      id-token: write
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/mah0x211/lua-ci:latest
     strategy:
       matrix:
         lua-version:
@@ -36,18 +41,16 @@ jobs:
           - "5.2.:latest"
           - "5.3.:latest"
           - "5.4.:latest"
-        #   - "lj-v2.1:latest"
+          - "lj-v2.1:latest"
     steps:
     -
-      name: Checkout
-      uses: actions/checkout@v2
-      with:
-        submodules: 'true'
+      name: Switch Lua Version
+      run: |
+        lenv -g use ${{ matrix.lua-version }}
+        lua -v || true
     -
-      name: Setup Lua ${{ matrix.lua-version }}
-      uses: mah0x211/setup-lua@v1
-      with:
-        versions: ${{ matrix.lua-version }}
+      name: Checkout
+      uses: actions/checkout@v7
     -
       name: Install Tools
       run: |
@@ -61,8 +64,10 @@ jobs:
       run: |
         lua ./test/dump_test.lua
     -
-      name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      name: Upload coverage files to Codecov
+      uses: codecov/codecov-action@v5
       with:
-        token: ${{ secrets.CODECOV_TOKEN }}
+        use_oidc: true
+        disable_search: true
+        files: ./luacov.report.out
         flags: unittests
