@@ -810,5 +810,133 @@ function testcase.dump_string_vs_other_type_sorting()
     end
 end
 
+function testcase.dump_filtered_key_sorting()
+    for _, input_key in ipairs({
+        1,
+        false,
+        {},
+    }) do
+        local result = dump({
+            [input_key] = "converted",
+            z = "unchanged",
+        }, nil, nil, function(val, depth, vtype, use)
+            if use == 'key' and val == input_key then
+                return 'alpha'
+            end
+            return val
+        end)
+        assert.equal(result, [[{
+    alpha = "converted",
+    z = "unchanged"
+}]])
+    end
+end
+
+function testcase.dump_renamed_string_key_sorting()
+    local names = {
+        a = 'z',
+        z = 'a',
+    }
+    local result = dump({
+        a = 1,
+        z = 2,
+    }, nil, nil, function(val, depth, vtype, use)
+        if use == 'key' then
+            return names[val]
+        end
+        return val
+    end)
+    assert.equal(result, [[{
+    a = 2,
+    z = 1
+}]])
+end
+
+function testcase.dump_distinct_tables_with_same_tostring()
+    local mt = {
+        __tostring = function()
+            return 'same'
+        end,
+    }
+    local child = setmetatable({ value = 1 }, mt)
+    child.self = child
+    local root = setmetatable({ child = child }, mt)
+    assert.equal(dump(root, 0),
+                 '{ child = { self = "<Circular same>", value = 1 } }')
+
+    -- A shared table is expanded again after leaving its earlier occurrence.
+    root = { a = child, b = child }
+    assert.equal(dump(root, 0),
+                 '{ a = { self = "<Circular same>", value = 1 }, ' ..
+                 'b = { self = "<Circular same>", value = 1 } }')
+end
+
+function testcase.dump_distinct_table_keys_with_same_tostring()
+    local mt = {
+        __tostring = function()
+            return 'same'
+        end,
+    }
+    local key = setmetatable({ name = 'key' }, mt)
+    key.self = key
+    local root = setmetatable({ [key] = 'value' }, mt)
+    assert.equal(dump(root, 0),
+                 '{ [{ name = "key", self = "<Circular same>" }] = "value" }')
+end
+
+function testcase.dump_circular_marker_escaping()
+    for _, label in ipairs({
+        'plain',
+        'double "quote"',
+        "single 'quote'",
+        'back\\slash',
+        'line\nbreak',
+        '\0\1\31\127',
+        ']] ]=]',
+    }) do
+        local t = setmetatable({}, {
+            __tostring = function()
+                return label
+            end,
+        })
+        t.self = t
+        local marker = '<Circular ' .. label .. '>'
+        local result = dump(t, 0)
+        assert.equal(result, ('{ self = %q }'):format(marker))
+        local chunk, err = (loadstring or load)('return ' .. result)
+        assert(chunk, err)
+        assert.equal(chunk().self, marker)
+    end
+end
+
+function testcase.dump_circular_key_marker_escaping()
+    for _, label in ipairs({
+        'double "quote"',
+        'back\\slash',
+        'line\nbreak',
+        '\0\1\31\127',
+    }) do
+        local mt = { __tostring = function() return label end }
+        local key = setmetatable({}, mt)
+        key.self = key
+        local root = { [key] = 'value' }
+        local marker = '<Circular ' .. label .. '>'
+        local result = dump(root, 0)
+        local chunk, err = (loadstring or load)('return ' .. result)
+        assert(chunk, err)
+        local dumped_key, dumped_value = next(chunk())
+        assert.equal(dumped_key.self, marker)
+        assert.equal(dumped_value, 'value')
+
+        -- The circular marker can itself become the output key.
+        root = setmetatable({}, mt)
+        root[root] = 'root key'
+        result = dump(root, 0)
+        chunk, err = (loadstring or load)('return ' .. result)
+        assert(chunk, err)
+        assert.equal(chunk()[marker], 'root key')
+    end
+end
+
 -- Run described test cases
 run_all_tests()
