@@ -331,6 +331,46 @@ function testcase.dump_special_keys()
 }]])
 end
 
+function testcase.dump_reserved_word_keys()
+    local words = {
+        'and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for',
+        'function', 'global', 'goto', 'if', 'in', 'local', 'nil', 'not',
+        'or', 'repeat', 'return', 'then', 'true', 'until', 'while',
+    }
+    for _, word in ipairs(words) do
+        local result = dump({ [word] = 42 }, 0)
+        assert.equal(result, ('{ [%q] = 42 }'):format(word))
+        local chunk = builtin_assert((loadstring or load)('return ' .. result))
+        assert.equal(chunk()[word], 42)
+    end
+    for _, name in ipairs({ 'Global', '_global', 'global_name', 'global1' }) do
+        assert.equal(dump({ [name] = 42 }, 0), '{ ' .. name .. ' = 42 }')
+    end
+end
+
+function testcase.dump_global_key_tracking()
+    local value = {}
+    value.self = value
+    local root = { ['global'] = value }
+    local marker = '<Circular ' .. tostring(value) .. '>'
+    for _, indent in ipairs({ 0, 2 }) do
+        for _, tracking in ipairs({ false, true }) do
+            local result = dump(root, indent, nil, nil, nil, tracking)
+            assert.contains(result, '["global"] = {')
+            local parsed
+            if tracking then
+                parsed = assert_tracking(result, {
+                    '$["global"].self = ' .. string.format('%q', marker),
+                }, {}, indent == 0)
+            else
+                local chunk = builtin_assert((loadstring or load)('return ' .. result))
+                parsed = chunk()
+            end
+            assert.equal(parsed['global'].self, marker)
+        end
+    end
+end
+
 function testcase.dump_indent_and_padding()
     -- test indent and padding options
 
