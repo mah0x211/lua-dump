@@ -884,5 +884,59 @@ function testcase.dump_distinct_table_keys_with_same_tostring()
                  '{ [{ name = "key", self = "<Circular same>" }] = "value" }')
 end
 
+function testcase.dump_circular_marker_escaping()
+    for _, label in ipairs({
+        'plain',
+        'double "quote"',
+        "single 'quote'",
+        'back\\slash',
+        'line\nbreak',
+        '\0\1\31\127',
+        ']] ]=]',
+    }) do
+        local t = setmetatable({}, {
+            __tostring = function()
+                return label
+            end,
+        })
+        t.self = t
+        local marker = '<Circular ' .. label .. '>'
+        local result = dump(t, 0)
+        assert.equal(result, ('{ self = %q }'):format(marker))
+        local chunk, err = (loadstring or load)('return ' .. result)
+        assert(chunk, err)
+        assert.equal(chunk().self, marker)
+    end
+end
+
+function testcase.dump_circular_key_marker_escaping()
+    for _, label in ipairs({
+        'double "quote"',
+        'back\\slash',
+        'line\nbreak',
+        '\0\1\31\127',
+    }) do
+        local mt = { __tostring = function() return label end }
+        local key = setmetatable({}, mt)
+        key.self = key
+        local root = { [key] = 'value' }
+        local marker = '<Circular ' .. label .. '>'
+        local result = dump(root, 0)
+        local chunk, err = (loadstring or load)('return ' .. result)
+        assert(chunk, err)
+        local dumped_key, dumped_value = next(chunk())
+        assert.equal(dumped_key.self, marker)
+        assert.equal(dumped_value, 'value')
+
+        -- The circular marker can itself become the output key.
+        root = setmetatable({}, mt)
+        root[root] = 'root key'
+        result = dump(root, 0)
+        chunk, err = (loadstring or load)('return ' .. result)
+        assert(chunk, err)
+        assert.equal(chunk()[marker], 'root key')
+    end
+end
+
 -- Run described test cases
 run_all_tests()

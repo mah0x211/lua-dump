@@ -180,7 +180,7 @@ local function dump_circular(ctx, tbl, ref, dump_next_table)
         return strformat('%q', tostring(val))
     end
 
-    return '"<Circular ' .. ref .. '>"'
+    return strformat('%q', '<Circular ' .. ref .. '>')
 end
 
 --- sort_index
