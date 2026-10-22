@@ -218,7 +218,7 @@ local function dump_next_table(ctx, tbl)
     ctx.depth = depth + 1
 
     local ref = tostring(tbl)
-    if ctx.circular[ref] then
+    if ctx.circular[tbl] then
         -- dump circular referenced table to a string
         -- if it is circular, it will return a string that indicates the circular references
         local str = dump_circular(ctx, tbl, ref, dump_next_table)
@@ -231,11 +231,11 @@ local function dump_next_table(ctx, tbl)
     ctx.indent = indent .. ctx.padding
 
     -- save reference
-    ctx.circular[ref] = true
+    ctx.circular[tbl] = true
     -- dump table
     local arr, narr = dump_table(ctx, tbl, dump_next_table)
     -- remove reference
-    ctx.circular[ref] = nil
+    ctx.circular[tbl] = nil
     -- restore context
     ctx.indent = indent
     ctx.depth = depth

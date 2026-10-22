@@ -852,5 +852,37 @@ function testcase.dump_renamed_string_key_sorting()
 }]])
 end
 
+function testcase.dump_distinct_tables_with_same_tostring()
+    local mt = {
+        __tostring = function()
+            return 'same'
+        end,
+    }
+    local child = setmetatable({ value = 1 }, mt)
+    child.self = child
+    local root = setmetatable({ child = child }, mt)
+    assert.equal(dump(root, 0),
+                 '{ child = { self = "<Circular same>", value = 1 } }')
+
+    -- A shared table is expanded again after leaving its earlier occurrence.
+    root = { a = child, b = child }
+    assert.equal(dump(root, 0),
+                 '{ a = { self = "<Circular same>", value = 1 }, ' ..
+                 'b = { self = "<Circular same>", value = 1 } }')
+end
+
+function testcase.dump_distinct_table_keys_with_same_tostring()
+    local mt = {
+        __tostring = function()
+            return 'same'
+        end,
+    }
+    local key = setmetatable({ name = 'key' }, mt)
+    key.self = key
+    local root = setmetatable({ [key] = 'value' }, mt)
+    assert.equal(dump(root, 0),
+                 '{ [{ name = "key", self = "<Circular same>" }] = "value" }')
+end
+
 -- Run described test cases
 run_all_tests()
